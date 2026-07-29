@@ -6,20 +6,12 @@ import javax.swing.JTable;
 import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableCellRenderer;
 
-/**
- * Decides how one Price cell is drawn: green if that symbol's price rose,
- * red if it fell, plain if it is the symbol's first quote.
- *
- * The direction was worked out when the row was added and stored in a hidden
- * model column, so this renderer only has to read it — never recalculate it.
- */
 public class PriceCellRenderer extends DefaultTableCellRenderer {
 
-    /** Hidden column holding -1 (fell), 0 (unchanged/first) or 1 (rose). */
     private static final int DIRECTION_COLUMN = 3;
 
     public PriceCellRenderer() {
-        setHorizontalAlignment(SwingConstants.RIGHT); // numbers read better right-aligned
+        setHorizontalAlignment(SwingConstants.RIGHT);
     }
 
     @Override
@@ -27,14 +19,11 @@ public class PriceCellRenderer extends DefaultTableCellRenderer {
                                                    boolean isSelected, boolean hasFocus,
                                                    int row, int column) {
 
-        // Let the superclass set the text, font and selection defaults first.
         super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
         int direction = readDirection(table, row);
 
         if (isSelected) {
-            // While a row is selected, let the selection colours win so the
-            // user can still see what they have clicked on.
             setBackground(table.getSelectionBackground());
             setForeground(table.getSelectionForeground());
         } else if (direction > 0) {
@@ -44,8 +33,6 @@ public class PriceCellRenderer extends DefaultTableCellRenderer {
             setBackground(Theme.FALL_BG);
             setForeground(Theme.FALL_FG);
         } else {
-            // Always reset explicitly: this component is reused for every cell,
-            // so leftover colours from a previous cell would otherwise persist.
             setBackground(table.getBackground());
             setForeground(Theme.TEXT);
         }

@@ -8,31 +8,23 @@ import java.awt.RenderingHints;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 
-/**
- * A JButton that paints its own flat, rounded, coloured background.
- *
- * The stock Windows look-and-feel paints its own button skin and ignores
- * setBackground(), so the only reliable way to get a custom colour is to
- * switch that skin off and draw the shape ourselves.
- */
 public class FlatButton extends JButton {
 
     private static final int CORNER_RADIUS = 8;
 
-    /** The button's normal colour; hover and pressed states are derived from it. */
     private final Color baseColour;
 
     public FlatButton(String text, Color baseColour) {
         super(text);
         this.baseColour = baseColour;
 
-        setContentAreaFilled(false); // stop the look-and-feel filling the background
-        setBorderPainted(false);     // ...and drawing its own border
-        setOpaque(false);            // ...and stop Swing blanking our rounded shape
-        setFocusPainted(false);      // no dotted focus rectangle
+        setContentAreaFilled(false);
+        setBorderPainted(false);
+        setOpaque(false);
+        setFocusPainted(false);
         setForeground(Theme.BTN_TEXT);
         setFont(Theme.FONT_BUTTON);
-        setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16)); // inner padding
+        setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
         setRolloverEnabled(true);
     }
 
@@ -49,10 +41,9 @@ public class FlatButton extends JButton {
             g2.dispose();
         }
 
-        super.paintComponent(g); // draws the label text on top of our shape
+        super.paintComponent(g);
     }
 
-    /** Picks the fill colour for the button's current state. */
     private Color currentFill() {
         if (!isEnabled()) {
             return Theme.BTN_DISABLED;
@@ -66,7 +57,6 @@ public class FlatButton extends JButton {
         return baseColour;
     }
 
-    /** Moves a colour part of the way towards white. */
     private static Color lighten(Color colour) {
         return new Color(
                 Math.min(255, colour.getRed() + 28),

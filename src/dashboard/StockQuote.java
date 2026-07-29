@@ -3,10 +3,6 @@ package dashboard;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
- * One price observation for one stock at one moment in time.
- * Immutable: once constructed, none of its values can change.
- */
 public final class StockQuote {
 
     private static final DateTimeFormatter TIME_FORMAT =
@@ -34,7 +30,6 @@ public final class StockQuote {
         return price;
     }
 
-    /** Timestamp formatted for display in the table's first column. */
     public String getFormattedTime() {
         return timestamp.format(TIME_FORMAT);
     }

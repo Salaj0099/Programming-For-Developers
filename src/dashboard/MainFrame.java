@@ -37,26 +37,17 @@ import javax.swing.table.DefaultTableModel;
 
 public class MainFrame extends JFrame {
 
-    /** How often the EDT drains the queue into the table, in milliseconds. */
     private static final int UI_REFRESH_MS = 100;
 
-    /** Maximum quotes moved from queue to table in one drain, to keep the EDT responsive. */
     private static final int MAX_DRAIN_PER_TICK = 200;
 
-    /** Allowed range for the "MA window" input field. */
     private static final int MIN_MA_WINDOW = 1;
     private static final int MAX_MA_WINDOW = 200;
 
-    /** Artificial delay so the background calculation is long enough to see. */
     private static final int SIMULATED_WORK_MS = 3000;
 
-    /** How many slices the simulated work is split into, for progress reporting. */
     private static final int PROGRESS_STEPS = 50;
 
-    /**
-     * Most recent quotes kept in the table and in history. Older ones are
-     * discarded so a long-running feed cannot exhaust memory.
-     */
     private static final int MAX_RETAINED_QUOTES = 5000;
 
     private final JButton startButton = new FlatButton("Start Data Feed", Theme.BTN_START);
@@ -65,10 +56,6 @@ public class MainFrame extends JFrame {
     private final JSlider speedSlider = new JSlider(100, 2000, 1000);
     private final JTextField maWindowField = new JTextField("5", 5);
 
-    /**
-     * Four columns, but only the first three are shown. "Direction" is a
-     * hidden helper column recording whether the price rose or fell.
-     */
     private final DefaultTableModel tableModel =
             new DefaultTableModel(new Object[] { "Timestamp", "Symbol", "Price", "Direction" }, 0);
     private final JTable priceTable = new JTable(tableModel);
@@ -77,32 +64,16 @@ public class MainFrame extends JFrame {
     private final JPanel statusPanel = new JPanel(new BorderLayout());
     private final JProgressBar progressBar = new JProgressBar(0, 100);
 
-    /** Shared hand-off point between the producer thread and the EDT. */
     private final ArrayBlockingQueue<StockQuote> queue = new ArrayBlockingQueue<>(1000);
 
-    /**
-     * Every quote that has reached the table, kept for calculations.
-     * Written by the EDT, read by the SwingWorker thread, so it must be
-     * synchronised. Iterating it still requires locking on the list itself.
-     */
     private final List<StockQuote> history =
             Collections.synchronizedList(new ArrayList<>());
 
-    /**
-     * Each symbol's most recent price, used only to decide the colour of the
-     * next cell. Touched exclusively by the EDT, so a plain HashMap is fine.
-     */
     private final Map<String, Double> lastPriceBySymbol = new HashMap<>();
 
-    /**
-     * Null until Start is pressed for the first time. After a Stop these still
-     * refer to the most recent (now finished) producer, which is why the drop
-     * count survives long enough to be displayed.
-     */
     private QuoteProducer producer;
     private Thread producerThread;
 
-    /** Fires on the EDT; moves quotes from the queue into the table. */
     private final Timer uiTimer = new Timer(UI_REFRESH_MS, e -> drainQueueIntoTable());
 
     public MainFrame() {
@@ -114,7 +85,6 @@ public class MainFrame extends JFrame {
         setLayout(new BorderLayout());
         getContentPane().setBackground(Theme.BACKGROUND);
 
-        // The whole top strip: banner on top, controls underneath.
         JPanel topArea = new JPanel(new BorderLayout());
         topArea.add(buildHeader(), BorderLayout.NORTH);
         topArea.add(buildControlPanel(), BorderLayout.CENTER);
@@ -132,8 +102,6 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // Ask the producer to finish before the JVM exits, rather than letting
-        // the thread be killed mid-loop.
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -142,9 +110,6 @@ public class MainFrame extends JFrame {
         });
     }
 
-    // ---------------------------------------------------------------- layout
-
-    /** Dark banner across the top: application title and a one-line description. */
     private JPanel buildHeader() {
         JPanel panel = new JPanel(new GridLayout(2, 1));
         panel.setBackground(Theme.HEADER_BG);
@@ -190,7 +155,6 @@ public class MainFrame extends JFrame {
         return panel;
     }
 
-    /** A caption sitting beside one of the input controls. */
     private JLabel fieldLabel(String text) {
         JLabel label = new JLabel(text);
         label.setFont(Theme.FONT_LABEL);
@@ -229,15 +193,10 @@ public class MainFrame extends JFrame {
         priceTable.getTableHeader().setForeground(Theme.TABLE_HEADER_FG);
         priceTable.getTableHeader().setReorderingAllowed(false);
 
-        // Colour the Price column according to the hidden Direction value.
         priceTable.getColumnModel().getColumn(2).setCellRenderer(new PriceCellRenderer());
 
-        // Hide "Direction" from the view. The data stays in the model, so the
-        // renderer can still read it — the user simply never sees the column.
         priceTable.removeColumn(priceTable.getColumnModel().getColumn(3));
 
-        // Stop Swing rebuilding the columns (and un-hiding Direction) if the
-        // model ever fires a structure-change event.
         priceTable.setAutoCreateColumnsFromModel(false);
     }
 
@@ -255,10 +214,10 @@ public class MainFrame extends JFrame {
 
         statusLabel.setFont(Theme.FONT_STATUS);
 
-        progressBar.setStringPainted(true);   // show "42%" inside the bar
+        progressBar.setStringPainted(true);
         progressBar.setPreferredSize(new Dimension(200, 18));
         progressBar.setForeground(Theme.BTN_CALC);
-        progressBar.setVisible(false);        // only shown during a calculation
+        progressBar.setVisible(false);
 
         statusPanel.add(statusLabel, BorderLayout.WEST);
         statusPanel.add(progressBar, BorderLayout.EAST);
@@ -267,27 +226,18 @@ public class MainFrame extends JFrame {
         return statusPanel;
     }
 
-    // ------------------------------------------------------- status bar states
-
-    /** Grey: nothing running. */
     private void showIdleStatus() {
         applyStatus("Idle", Theme.STATUS_IDLE_BG, Theme.STATUS_IDLE_FG);
     }
 
-    /** Green: the data feed is streaming. */
     private void showActiveStatus(String text) {
         applyStatus(text, Theme.STATUS_ACTIVE_BG, Theme.STATUS_ACTIVE_FG);
     }
 
-    /** Red: something the user needs to notice. */
     private void showErrorStatus(String text) {
         applyStatus(text, Theme.STATUS_ERROR_BG, Theme.STATUS_ERROR_FG);
     }
 
-    /**
-     * Puts the status bar back to whatever the feed is actually doing, clearing
-     * any error left over from a rejected calculation.
-     */
     private void restoreFeedStatus() {
         if (uiTimer.isRunning()) {
             showActiveStatus("Data feed active");
@@ -303,13 +253,7 @@ public class MainFrame extends JFrame {
         progressBar.setBackground(background);
     }
 
-    // ------------------------------------------------------------ feed control
-
-    /** Runs on the EDT (button click). */
     private void startFeed() {
-        // A stopped producer can leave one last quote behind if it was
-        // mid-loop when Stop was pressed. Discard it so the restarted feed
-        // does not begin with a stale timestamp.
         queue.clear();
 
         producer = new QuoteProducer(queue, speedSlider.getValue());
@@ -324,35 +268,29 @@ public class MainFrame extends JFrame {
         showActiveStatus("Data feed active");
     }
 
-    /** Runs on the EDT (button click). */
     private void stopFeed() {
         stopProducerThread();
 
         uiTimer.stop();
-        drainQueueIntoTable();     // show anything produced just before stopping
+        drainQueueIntoTable();
 
         startButton.setEnabled(true);
         stopButton.setEnabled(false);
-        showIdleStatus();          // must come after the drain, which sets green
+        showIdleStatus();
     }
 
-    /** Asks the producer to finish. Safe to call when nothing is running. */
     private void stopProducerThread() {
         if (producer != null) {
-            producer.stop();            // flips the volatile flag; thread exits its loop
-            producerThread.interrupt(); // wakes it early if it is mid-sleep
+            producer.stop();
+            producerThread.interrupt();
         }
     }
 
-    /** Called when the window is closing, before the JVM shuts down. */
     private void shutdown() {
         stopProducerThread();
         uiTimer.stop();
     }
 
-    // -------------------------------------------------------------- consumer
-
-    /** Always runs on the EDT: either from the Swing Timer or from stopFeed(). */
     private void drainQueueIntoTable() {
         List<StockQuote> batch = new ArrayList<>();
         queue.drainTo(batch, MAX_DRAIN_PER_TICK);
@@ -377,11 +315,6 @@ public class MainFrame extends JFrame {
         updateStatusWithDropCount();
     }
 
-    /**
-     * Drops the oldest quotes once the retention limit is passed, keeping the
-     * table and the history in step. Without this both grow for as long as the
-     * feed runs, and memory grows with them.
-     */
     private void trimToRetentionLimit() {
         int excessRows = tableModel.getRowCount() - MAX_RETAINED_QUOTES;
         for (int i = 0; i < excessRows; i++) {
@@ -396,16 +329,11 @@ public class MainFrame extends JFrame {
         }
     }
 
-    /**
-     * Compares this quote with the previous one for the same symbol and
-     * records the result: 1 rose, -1 fell, 0 unchanged or first sighting.
-     * Runs on the EDT as each row is added, so the renderer never recalculates.
-     */
     private Integer directionFor(StockQuote quote) {
         Double previous = lastPriceBySymbol.put(quote.getSymbol(), quote.getPrice());
 
         if (previous == null) {
-            return 0; // first quote for this symbol: nothing to compare against
+            return 0;
         }
         return Double.compare(quote.getPrice(), previous);
     }
@@ -428,9 +356,6 @@ public class MainFrame extends JFrame {
                 : "Data feed active — dropped: " + dropped);
     }
 
-    // ------------------------------------------------------------ indicators
-
-    /** Runs on the EDT (button click). Validates input, then hands work to a worker thread. */
     private void calculateIndicators() {
         String typed = maWindowField.getText().trim();
 
@@ -456,7 +381,6 @@ public class MainFrame extends JFrame {
             return;
         }
 
-        // Take the snapshot on the EDT so the size we validate is the size we use.
         List<StockQuote> snapshot = snapshotHistory();
 
         if (snapshot.size() < window) {
@@ -469,7 +393,6 @@ public class MainFrame extends JFrame {
         runCalculationInBackground(snapshot, window);
     }
 
-    /** Copies the shared history so the worker thread reads a private, unchanging list. */
     private List<StockQuote> snapshotHistory() {
         synchronized (history) {
             return new ArrayList<>(history);
@@ -477,8 +400,6 @@ public class MainFrame extends JFrame {
     }
 
     private void showInputWarning(String message) {
-        // Red status bar as well as the dialog, so the state is visible after
-        // the dialog is dismissed. A running feed repaints it green next tick.
         showErrorStatus("Invalid MA window — calculation not started");
 
         JOptionPane.showMessageDialog(this, message,
@@ -486,7 +407,7 @@ public class MainFrame extends JFrame {
     }
 
     private void runCalculationInBackground(List<StockQuote> snapshot, int window) {
-        restoreFeedStatus();   // clear any red left by an earlier rejected attempt
+        restoreFeedStatus();
         calculateButton.setEnabled(false);
         chart.showMessage("Calculating moving average (window " + window + ")...");
 
@@ -495,18 +416,15 @@ public class MainFrame extends JFrame {
 
         SwingWorker<List<Double>, Void> worker = new SwingWorker<List<Double>, Void>() {
 
-            /** Runs on a background thread. Must not touch any Swing component. */
             @Override
             protected List<Double> doInBackground() throws Exception {
-                // Heavy work simulated in slices, so progress can be reported as we go.
                 for (int step = 1; step <= PROGRESS_STEPS; step++) {
                     Thread.sleep(SIMULATED_WORK_MS / PROGRESS_STEPS);
-                    setProgress(step * 100 / PROGRESS_STEPS); // fires a property change
+                    setProgress(step * 100 / PROGRESS_STEPS);
                 }
                 return movingAverage(snapshot, window);
             }
 
-            /** Runs on the EDT once doInBackground() returns. Safe to touch Swing here. */
             @Override
             protected void done() {
                 try {
@@ -525,7 +443,6 @@ public class MainFrame extends JFrame {
             }
         };
 
-        // Swing delivers these events on the EDT, so it is safe to touch the bar here.
         worker.addPropertyChangeListener(event -> {
             if ("progress".equals(event.getPropertyName())) {
                 progressBar.setValue((Integer) event.getNewValue());
@@ -535,10 +452,6 @@ public class MainFrame extends JFrame {
         worker.execute();
     }
 
-    /**
-     * Turns an ExecutionException into readable text. Both the cause and its
-     * message can be null, so neither is dereferenced blindly.
-     */
     private static String describeCause(ExecutionException ex) {
         Throwable cause = ex.getCause();
         if (cause == null) {
@@ -549,11 +462,6 @@ public class MainFrame extends JFrame {
                 : cause.getMessage();
     }
 
-    /**
-     * Sliding-window moving average. Each output value is the mean of the
-     * {@code window} most recent prices, so the series is never longer than
-     * the input (it has size - window + 1 values).
-     */
     private static List<Double> movingAverage(List<StockQuote> quotes, int window) {
         List<Double> averages = new ArrayList<>();
         double sum = 0;
@@ -562,7 +470,7 @@ public class MainFrame extends JFrame {
             sum += quotes.get(i).getPrice();
 
             if (i >= window) {
-                sum -= quotes.get(i - window).getPrice(); // drop the value leaving the window
+                sum -= quotes.get(i - window).getPrice();
             }
             if (i >= window - 1) {
                 averages.add(sum / window);
@@ -571,7 +479,6 @@ public class MainFrame extends JFrame {
         return averages;
     }
 
-    /** Runs on the EDT, called from done(). */
     private void showResult(List<Double> averages, List<StockQuote> snapshot, int window) {
         List<Double> prices = new ArrayList<>();
         for (StockQuote quote : snapshot) {
@@ -581,12 +488,8 @@ public class MainFrame extends JFrame {
         chart.setData(prices, averages, window);
     }
 
-    // ------------------------------------------------------------------ main
-
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            // FlatButton paints its own background, but the label of a disabled
-            // button is drawn by the look-and-feel, so its colour is set here.
             UIManager.put("Button.disabledText", Theme.BTN_DISABLED_TEXT);
 
             new MainFrame().setVisible(true);

@@ -11,32 +11,23 @@ import java.util.List;
 
 import javax.swing.JPanel;
 
-/**
- * Draws the price series and its moving average as two overlaid line graphs.
- * Everything is painted by hand with Graphics2D — no charting library.
- */
 public class ChartPanel extends JPanel {
 
-    // Space reserved around the plotting area for labels, in pixels.
     private static final int PAD_LEFT = 65;
     private static final int PAD_RIGHT = 20;
     private static final int PAD_TOP = 20;
     private static final int PAD_BOTTOM = 35;
 
-    // Line colours live in Theme so the whole palette sits in one file.
-    private static final Color PRICE_COLOUR = Theme.CHART_PRICE; // navy
-    private static final Color MA_COLOUR = Theme.CHART_MA;       // amber
+    private static final Color PRICE_COLOUR = Theme.CHART_PRICE;
+    private static final Color MA_COLOUR = Theme.CHART_MA;
     private static final Color AXIS_COLOUR = Theme.CHART_AXIS;
 
-    /** All prices, oldest first. */
     private List<Double> prices = new ArrayList<>();
 
-    /** Moving average values; shorter than prices by (window - 1). */
     private List<Double> movingAverages = new ArrayList<>();
 
     private int window;
 
-    /** Shown instead of the chart whenever there is nothing to plot. */
     private String message = "No data yet — start the feed, then click Calculate Indicators.";
 
     public ChartPanel() {
@@ -44,7 +35,6 @@ public class ChartPanel extends JPanel {
         setFont(Theme.FONT_LABEL);
     }
 
-    /** Called on the EDT. Replaces the data and asks Swing for a repaint. */
     public void setData(List<Double> prices, List<Double> movingAverages, int window) {
         this.prices = new ArrayList<>(prices);
         this.movingAverages = new ArrayList<>(movingAverages);
@@ -53,7 +43,6 @@ public class ChartPanel extends JPanel {
         repaint();
     }
 
-    /** Called on the EDT. Clears the chart and shows a line of text instead. */
     public void showMessage(String message) {
         this.prices = new ArrayList<>();
         this.movingAverages = new ArrayList<>();
@@ -61,15 +50,11 @@ public class ChartPanel extends JPanel {
         repaint();
     }
 
-    /**
-     * Swing calls this whenever the panel needs to appear on screen.
-     * Never call it yourself — call repaint() instead.
-     */
     @Override
     protected void paintComponent(Graphics g) {
-        super.paintComponent(g); // lets JPanel paint its background first
+        super.paintComponent(g);
 
-        Graphics2D g2 = (Graphics2D) g.create(); // a private copy we may freely modify
+        Graphics2D g2 = (Graphics2D) g.create();
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                     RenderingHints.VALUE_ANTIALIAS_ON);
@@ -80,7 +65,7 @@ public class ChartPanel extends JPanel {
             }
             drawChart(g2);
         } finally {
-            g2.dispose(); // release the copy's native resources
+            g2.dispose();
         }
     }
 
@@ -100,7 +85,7 @@ public class ChartPanel extends JPanel {
         int plotHeight = getHeight() - PAD_TOP - PAD_BOTTOM;
 
         if (plotWidth <= 0 || plotHeight <= 0) {
-            return; // panel too small to draw anything sensible
+            return;
         }
 
         double min = Double.MAX_VALUE;
@@ -109,7 +94,7 @@ public class ChartPanel extends JPanel {
             min = Math.min(min, price);
             max = Math.max(max, price);
         }
-        if (max - min < 0.01) { // all prices equal: invent a range so the line isn't on the edge
+        if (max - min < 0.01) {
             min -= 0.5;
             max += 0.5;
         }
@@ -120,7 +105,6 @@ public class ChartPanel extends JPanel {
         drawLegend(g2);
     }
 
-    /** Converts a position in the series (0 .. count-1) into an x pixel. */
     private int toPixelX(int index, int count, int plotWidth) {
         if (count <= 1) {
             return PAD_LEFT;
@@ -128,7 +112,6 @@ public class ChartPanel extends JPanel {
         return PAD_LEFT + (int) Math.round((double) index / (count - 1) * plotWidth);
     }
 
-    /** Converts a price into a y pixel. Bigger price = smaller y, because y grows downwards. */
     private int toPixelY(double value, double min, double max, int plotHeight) {
         double fraction = (value - min) / (max - min);
         return PAD_TOP + (int) Math.round((1 - fraction) * plotHeight);
@@ -142,7 +125,6 @@ public class ChartPanel extends JPanel {
         int bottom = PAD_TOP + plotHeight;
         double mid = (min + max) / 2;
 
-        // Faint horizontal guide lines behind the data.
         g2.setColor(Theme.CHART_GRID);
         for (double value : new double[] { max, mid, min }) {
             int y = toPixelY(value, min, max, plotHeight);
@@ -150,8 +132,8 @@ public class ChartPanel extends JPanel {
         }
 
         g2.setColor(AXIS_COLOUR);
-        g2.drawLine(left, PAD_TOP, left, bottom);                  // vertical axis
-        g2.drawLine(left, bottom, left + plotWidth, bottom);       // horizontal axis
+        g2.drawLine(left, PAD_TOP, left, bottom);
+        g2.drawLine(left, bottom, left + plotWidth, bottom);
 
         g2.setColor(Color.DARK_GRAY);
         drawPriceLabel(g2, max, min, max, plotHeight);
@@ -162,7 +144,6 @@ public class ChartPanel extends JPanel {
                 left + 5, bottom + 22);
     }
 
-    /** Writes one price value to the left of the vertical axis, with a tick mark. */
     private void drawPriceLabel(Graphics2D g2, double value, double min, double max, int plotHeight) {
         int y = toPixelY(value, min, max, plotHeight);
         String text = String.format("%.2f", value);
@@ -172,11 +153,6 @@ public class ChartPanel extends JPanel {
         g2.drawLine(PAD_LEFT - 4, y, PAD_LEFT, y);
     }
 
-    /**
-     * Joins consecutive values with straight lines.
-     * {@code startIndex} shifts the series right, so each moving-average point
-     * sits under the price it was calculated from.
-     */
     private void drawSeries(Graphics2D g2, List<Double> values, int startIndex,
                             Color colour, int plotWidth, int plotHeight,
                             double min, double max) {
@@ -187,7 +163,7 @@ public class ChartPanel extends JPanel {
         g2.setColor(colour);
         g2.setStroke(new BasicStroke(1.8f));
 
-        int count = prices.size(); // both series share the price axis
+        int count = prices.size();
         int previousX = toPixelX(startIndex, count, plotWidth);
         int previousY = toPixelY(values.get(0), min, max, plotHeight);
 
