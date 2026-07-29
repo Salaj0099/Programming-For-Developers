@@ -23,9 +23,10 @@ public class ChartPanel extends JPanel {
     private static final int PAD_TOP = 20;
     private static final int PAD_BOTTOM = 35;
 
-    private static final Color PRICE_COLOUR = new Color(30, 110, 200);
-    private static final Color MA_COLOUR = new Color(225, 120, 20);
-    private static final Color AXIS_COLOUR = new Color(140, 140, 140);
+    // Line colours live in Theme so the whole palette sits in one file.
+    private static final Color PRICE_COLOUR = Theme.CHART_PRICE; // navy
+    private static final Color MA_COLOUR = Theme.CHART_MA;       // amber
+    private static final Color AXIS_COLOUR = Theme.CHART_AXIS;
 
     /** All prices, oldest first. */
     private List<Double> prices = new ArrayList<>();
@@ -39,7 +40,8 @@ public class ChartPanel extends JPanel {
     private String message = "No data yet — start the feed, then click Calculate Indicators.";
 
     public ChartPanel() {
-        setBackground(Color.WHITE);
+        setBackground(Theme.SURFACE);
+        setFont(Theme.FONT_LABEL);
     }
 
     /** Called on the EDT. Replaces the data and asks Swing for a repaint. */
@@ -138,11 +140,19 @@ public class ChartPanel extends JPanel {
 
         int left = PAD_LEFT;
         int bottom = PAD_TOP + plotHeight;
+        double mid = (min + max) / 2;
 
+        // Faint horizontal guide lines behind the data.
+        g2.setColor(Theme.CHART_GRID);
+        for (double value : new double[] { max, mid, min }) {
+            int y = toPixelY(value, min, max, plotHeight);
+            g2.drawLine(left + 1, y, left + plotWidth, y);
+        }
+
+        g2.setColor(AXIS_COLOUR);
         g2.drawLine(left, PAD_TOP, left, bottom);                  // vertical axis
         g2.drawLine(left, bottom, left + plotWidth, bottom);       // horizontal axis
 
-        double mid = (min + max) / 2;
         g2.setColor(Color.DARK_GRAY);
         drawPriceLabel(g2, max, min, max, plotHeight);
         drawPriceLabel(g2, mid, min, max, plotHeight);
