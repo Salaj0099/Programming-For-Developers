@@ -16,6 +16,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JSplitPane;
@@ -41,6 +42,9 @@ public class MainFrame extends JFrame {
     /** Artificial delay so the background calculation is long enough to see. */
     private static final int SIMULATED_WORK_MS = 3000;
 
+    /** How many slices the simulated work is split into, for progress reporting. */
+    private static final int PROGRESS_STEPS = 50;
+
     private final JButton startButton = new JButton("Start Data Feed");
     private final JButton stopButton = new JButton("Stop Data Feed");
     private final JButton calculateButton = new JButton("Calculate Indicators");
@@ -49,9 +53,9 @@ public class MainFrame extends JFrame {
     private final DefaultTableModel tableModel =
             new DefaultTableModel(new Object[] { "Timestamp", "Symbol", "Price" }, 0);
     private final JTable priceTable = new JTable(tableModel);
-    private final JPanel chartPanel = new JPanel(new BorderLayout());
-    private final JLabel indicatorLabel = new JLabel("No indicator calculated yet.");
+    private final ChartPanel chart = new ChartPanel();
     private final JLabel statusLabel = new JLabel("Idle");
+    private final JProgressBar progressBar = new JProgressBar(0, 100);
 
     /** Shared hand-off point between the producer thread and the EDT. */
     private final ArrayBlockingQueue<StockQuote> queue = new ArrayBlockingQueue<>(1000);
@@ -117,12 +121,9 @@ public class MainFrame extends JFrame {
         JScrollPane tableScroll = new JScrollPane(priceTable);
         tableScroll.setBorder(BorderFactory.createTitledBorder("Market Data"));
 
-        chartPanel.setBorder(BorderFactory.createTitledBorder("Price / Indicator"));
-        indicatorLabel.setVerticalAlignment(JLabel.TOP);
-        indicatorLabel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        chartPanel.add(indicatorLabel, BorderLayout.CENTER);
+        chart.setBorder(BorderFactory.createTitledBorder("Price / Indicator"));
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, chartPanel);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, chart);
         split.setResizeWeight(0.5);
         return split;
     }
@@ -130,7 +131,13 @@ public class MainFrame extends JFrame {
     private JPanel buildStatusBar() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+
+        progressBar.setStringPainted(true);   // show "42%" inside the bar
+        progressBar.setPreferredSize(new Dimension(200, 18));
+        progressBar.setVisible(false);        // only shown during a calculation
+
         panel.add(statusLabel, BorderLayout.WEST);
+        panel.add(progressBar, BorderLayout.EAST);
         return panel;
     }
 
@@ -263,14 +270,21 @@ public class MainFrame extends JFrame {
 
     private void runCalculationInBackground(List<StockQuote> snapshot, int window) {
         calculateButton.setEnabled(false);
-        indicatorLabel.setText("Calculating moving average (window " + window + ")...");
+        chart.showMessage("Calculating moving average (window " + window + ")...");
+
+        progressBar.setValue(0);
+        progressBar.setVisible(true);
 
         SwingWorker<List<Double>, Void> worker = new SwingWorker<List<Double>, Void>() {
 
             /** Runs on a background thread. Must not touch any Swing component. */
             @Override
             protected List<Double> doInBackground() throws Exception {
-                Thread.sleep(SIMULATED_WORK_MS); // stand-in for genuinely heavy work
+                // Heavy work simulated in slices, so progress can be reported as we go.
+                for (int step = 1; step <= PROGRESS_STEPS; step++) {
+                    Thread.sleep(SIMULATED_WORK_MS / PROGRESS_STEPS);
+                    setProgress(step * 100 / PROGRESS_STEPS); // fires a property change
+                }
                 return movingAverage(snapshot, window);
             }
 
@@ -281,15 +295,22 @@ public class MainFrame extends JFrame {
                     showResult(get(), snapshot, window);
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
-                    indicatorLabel.setText("Calculation was interrupted.");
+                    chart.showMessage("Calculation was interrupted.");
                 } catch (ExecutionException ex) {
-                    indicatorLabel.setText("<html>The calculation could not be completed.<br>"
-                            + "Reason: " + ex.getCause().getMessage() + "</html>");
+                    chart.showMessage("Calculation failed: " + ex.getCause().getMessage());
                 } finally {
                     calculateButton.setEnabled(true);
+                    progressBar.setVisible(false);
                 }
             }
         };
+
+        // Swing delivers these events on the EDT, so it is safe to touch the bar here.
+        worker.addPropertyChangeListener(event -> {
+            if ("progress".equals(event.getPropertyName())) {
+                progressBar.setValue((Integer) event.getNewValue());
+            }
+        });
 
         worker.execute();
     }
@@ -317,16 +338,12 @@ public class MainFrame extends JFrame {
 
     /** Runs on the EDT, called from done(). */
     private void showResult(List<Double> averages, List<StockQuote> snapshot, int window) {
-        double latest = averages.get(averages.size() - 1);
-        double lastPrice = snapshot.get(snapshot.size() - 1).getPrice();
+        List<Double> prices = new ArrayList<>();
+        for (StockQuote quote : snapshot) {
+            prices.add(quote.getPrice());
+        }
 
-        indicatorLabel.setText(String.format(
-                "<html><b>Moving average (window %d)</b><br><br>"
-                        + "Latest MA: %.2f<br>"
-                        + "Latest price: %.2f<br>"
-                        + "Quotes used: %d<br>"
-                        + "MA points produced: %d</html>",
-                window, latest, lastPrice, snapshot.size(), averages.size()));
+        chart.setData(prices, averages, window);
     }
 
     // ------------------------------------------------------------------ main
